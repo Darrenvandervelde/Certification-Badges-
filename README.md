@@ -1,12 +1,12 @@
-# Certification Badges App
+# GitHub Achievement Badge Builder
 
-A React app for generating Credly badge links/snippets you can paste into `README.md` using image badges.
+A React app that generates GitHub-ready badge Markdown from a GitHub username.
 
-## Features
-- Build Markdown badge links from Credly image + public credential URLs
-- Live badge preview
-- One-click copy for Markdown and HTML snippets
-- Ready to deploy on Vercel
+## What it does
+- Accepts a GitHub username.
+- Fetches live profile stats from the GitHub API.
+- Builds Shields.io badges for followers, following, repos, gists, and joined year.
+- Gives a copy-ready Markdown block for your GitHub profile `README.md`.
 
 ## Local development
 ```bash
@@ -18,10 +18,3 @@ npm run dev
 ```bash
 npm run build
 ```
-
-## Deploy to Vercel
-1. Push this repository to GitHub.
-2. Import the repo in Vercel.
-3. Vercel detects Vite automatically (also configured via `vercel.json`).
-4. Deploy and use your hosted app URL.
-

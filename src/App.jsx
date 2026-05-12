@@ -1,26 +1,89 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+
+const badgeConfigs = [
+  {
+    key: 'followers',
+    label: 'Followers',
+    color: '0e75b6',
+    logo: 'github',
+    value: (profile) => profile.followers,
+  },
+  {
+    key: 'following',
+    label: 'Following',
+    color: '1f6feb',
+    logo: 'github',
+    value: (profile) => profile.following,
+  },
+  {
+    key: 'repos',
+    label: 'Public Repos',
+    color: '238636',
+    logo: 'github',
+    value: (profile) => profile.public_repos,
+  },
+  {
+    key: 'gists',
+    label: 'Public Gists',
+    color: '7c3aed',
+    logo: 'gist',
+    value: (profile) => profile.public_gists,
+  },
+  {
+    key: 'joined',
+    label: 'Joined',
+    color: 'd97706',
+    logo: 'github',
+    value: (profile) => new Date(profile.created_at).getFullYear(),
+  },
+];
+
+const buildBadgeUrl = ({ label, message, color, logo }) => {
+  const safeLabel = encodeURIComponent(label);
+  const safeMessage = encodeURIComponent(String(message));
+  const safeColor = encodeURIComponent(color);
+  const safeLogo = encodeURIComponent(logo);
+  return `https://img.shields.io/badge/${safeLabel}-${safeMessage}-${safeColor}?logo=${safeLogo}&logoColor=white`;
+};
 
 function App() {
-  const [username, setUsername] = useState('steven-tapscott');
-  const [badges, setBadges] = useState([]);
+  const [username, setUsername] = useState('octocat');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [profile, setProfile] = useState(null);
 
-  const getBadgeData = (payload) => {
-    if (!payload) return [];
-    if (Array.isArray(payload.data)) return payload.data;
-    if (Array.isArray(payload.badges)) return payload.badges;
-    if (payload.data && Array.isArray(payload.data.badges)) return payload.data.badges;
-    return [];
-  };
+  const generatedBadges = useMemo(() => {
+    if (!profile) return [];
 
-  const fetchBadges = async (event) => {
+    return badgeConfigs.map((config) => {
+      const value = config.value(profile);
+      const image = buildBadgeUrl({
+        label: config.label,
+        message: value,
+        color: config.color,
+        logo: config.logo,
+      });
+
+      const markdown = `[![${config.label}](${image})](https://github.com/${profile.login})`;
+
+      return {
+        ...config,
+        value,
+        image,
+        markdown,
+      };
+    });
+  }, [profile]);
+
+  const markdownBlock = generatedBadges.map((badge) => badge.markdown).join('\n');
+
+  const fetchProfile = async (event) => {
     event.preventDefault();
-    const cleanUsername = username.trim();
 
+    const cleanUsername = username.trim();
     if (!cleanUsername) {
-      setError('Please enter a Credly username.');
-      setBadges([]);
+      setError('Please enter a GitHub username.');
+      setProfile(null);
       return;
     }
 
@@ -28,124 +91,71 @@ function App() {
     setError('');
 
     try {
-      const endpoints = [
-        `https://www.credly.com/users/${encodeURIComponent(cleanUsername)}/badges.json`,
-        `https://www.credly.com/users/${encodeURIComponent(cleanUsername)}/badges`,
-      ];
-
-      let parsed = null;
-
-      for (const endpoint of endpoints) {
-        try {
-          const response = await fetch(endpoint, {
-            headers: {
-              Accept: 'application/json',
-            },
-          });
-
-          if (!response.ok) continue;
-
-          const contentType = response.headers.get('content-type') || '';
-          if (!contentType.includes('application/json')) continue;
-
-          const json = await response.json();
-          const extracted = getBadgeData(json);
-          if (extracted.length > 0) {
-            parsed = extracted;
-            break;
-          }
-        } catch {
-          // Try next endpoint.
-        }
+      const response = await fetch(`https://api.github.com/users/${encodeURIComponent(cleanUsername)}`);
+      if (response.status === 404) {
+        throw new Error('User not found. Please check the username and try again.');
+      }
+      if (!response.ok) {
+        throw new Error('GitHub API is temporarily unavailable. Please try again.');
       }
 
-      if (!parsed) {
-        throw new Error('No badges found or username is not public.');
-      }
-
-      setBadges(parsed);
+      const json = await response.json();
+      setProfile(json);
     } catch (fetchError) {
-      setBadges([]);
-      setError(fetchError.message || 'Unable to fetch badges.');
+      setProfile(null);
+      setError(fetchError.message || 'Unable to fetch profile.');
     } finally {
       setLoading(false);
     }
   };
 
+  const copyMarkdown = async () => {
+    if (!markdownBlock) return;
+    await navigator.clipboard.writeText(markdownBlock);
+  };
+
   return (
     <main className="container">
-      <h1>Credly Badges by Username</h1>
-      <p>Enter a Credly username and pull all public badges into a table. The form defaults to the test user <strong>steven-tapscott</strong>.</p>
+      <h1>GitHub Achievement Badge Builder</h1>
+      <p>Enter your GitHub username to generate up-to-date badges you can paste directly into your GitHub profile README.</p>
 
       <section className="card">
-        <form onSubmit={fetchBadges} className="search-form">
-          <label htmlFor="username">Credly Username</label>
+        <form onSubmit={fetchProfile} className="search-form">
+          <label htmlFor="username">GitHub Username</label>
           <div className="search-row">
             <input
               id="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="example: john-doe"
+              placeholder="example: octocat"
             />
-            <button type="submit" disabled={loading}>
-              {loading ? 'Loading…' : 'Get Badges'}
-            </button>
+            <button type="submit" disabled={loading}>{loading ? 'Updating…' : 'Generate Badges'}</button>
           </div>
         </form>
-
         {error ? <p className="error">{error}</p> : null}
       </section>
 
-      <section className="card">
-        <h2>Badges ({badges.length})</h2>
+      {profile ? (
+        <>
+          <section className="card">
+            <h2>Preview for @{profile.login}</h2>
+            <div className="badges-grid">
+              {generatedBadges.map((badge) => (
+                <a key={badge.key} href={`https://github.com/${profile.login}`} target="_blank" rel="noreferrer">
+                  <img src={badge.image} alt={`${badge.label}: ${badge.value}`} />
+                </a>
+              ))}
+            </div>
+          </section>
 
-        {badges.length === 0 ? (
-          <p>No badges to display yet.</p>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Badge</th>
-                  <th>Title</th>
-                  <th>Issued</th>
-                  <th>Credential</th>
-                </tr>
-              </thead>
-              <tbody>
-                {badges.map((badge) => {
-                  const id = badge.id || badge.badge_template_id || badge.url;
-                  const title = badge.badge_template?.name || badge.name || 'Untitled Badge';
-                  const image =
-                    badge.badge_template?.image_url ||
-                    badge.badge_template?.image?.url ||
-                    badge.image_url ||
-                    '';
-                  const issuedAt = badge.issued_at || badge.issued_on || badge.created_at || '';
-                  const credentialUrl = badge.public_url || badge.url || '#';
-
-                  return (
-                    <tr key={id}>
-                      <td>{image ? <img src={image} alt={title} width="64" /> : 'N/A'}</td>
-                      <td>{title}</td>
-                      <td>{issuedAt ? new Date(issuedAt).toLocaleDateString() : 'N/A'}</td>
-                      <td>
-                        {credentialUrl !== '#' ? (
-                          <a href={credentialUrl} target="_blank" rel="noopener noreferrer">
-                            View
-                          </a>
-                        ) : (
-                          'N/A'
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+          <section className="card">
+            <h2>Markdown for GitHub Profile</h2>
+            <p>Copy and paste this block into your <code>README.md</code> in the profile repository.</p>
+            <textarea value={markdownBlock} readOnly rows={8} />
+            <button type="button" onClick={copyMarkdown} className="copy-btn">Copy Markdown</button>
+          </section>
+        </>
+      ) : null}
     </main>
   );
 }

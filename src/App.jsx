@@ -1,79 +1,150 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 function App() {
-  const [title, setTitle] = useState('AWS Certified Cloud Practitioner');
-  const [imageUrl, setImageUrl] = useState('https://images.credly.com/images/example-badge.png');
-  const [credentialUrl, setCredentialUrl] = useState('https://www.credly.com/badges/your-badge-id/public_url');
-  const [width, setWidth] = useState('140');
+  const [username, setUsername] = useState('steven-tapscott');
+  const [badges, setBadges] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const markdown = useMemo(() => {
-    const safeTitle = title.trim() || 'Certification Badge';
-    return `[![${safeTitle}](${imageUrl.trim()})](${credentialUrl.trim()})`;
-  }, [title, imageUrl, credentialUrl]);
+  const getBadgeData = (payload) => {
+    if (!payload) return [];
+    if (Array.isArray(payload.data)) return payload.data;
+    if (Array.isArray(payload.badges)) return payload.badges;
+    if (payload.data && Array.isArray(payload.data.badges)) return payload.data.badges;
+    return [];
+  };
 
-  const html = useMemo(() => {
-    const safeTitle = title.trim() || 'Certification Badge';
-    const safeWidth = Number(width) > 0 ? Number(width) : 140;
-    return `<a href="${credentialUrl.trim()}" target="_blank" rel="noopener noreferrer"><img src="${imageUrl.trim()}" alt="${safeTitle}" width="${safeWidth}" /></a>`;
-  }, [title, imageUrl, credentialUrl, width]);
+  const fetchBadges = async (event) => {
+    event.preventDefault();
+    const cleanUsername = username.trim();
 
-  const copyToClipboard = async (value) => {
-    await navigator.clipboard.writeText(value);
+    if (!cleanUsername) {
+      setError('Please enter a Credly username.');
+      setBadges([]);
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const endpoints = [
+        `https://www.credly.com/users/${encodeURIComponent(cleanUsername)}/badges.json`,
+        `https://www.credly.com/users/${encodeURIComponent(cleanUsername)}/badges`,
+      ];
+
+      let parsed = null;
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint, {
+            headers: {
+              Accept: 'application/json',
+            },
+          });
+
+          if (!response.ok) continue;
+
+          const contentType = response.headers.get('content-type') || '';
+          if (!contentType.includes('application/json')) continue;
+
+          const json = await response.json();
+          const extracted = getBadgeData(json);
+          if (extracted.length > 0) {
+            parsed = extracted;
+            break;
+          }
+        } catch {
+          // Try next endpoint.
+        }
+      }
+
+      if (!parsed) {
+        throw new Error('No badges found or username is not public.');
+      }
+
+      setBadges(parsed);
+    } catch (fetchError) {
+      setBadges([]);
+      setError(fetchError.message || 'Unable to fetch badges.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <main className="container">
-      <h1>Credly Badge Link Builder</h1>
-      <p>Create badge image snippets you can paste into your GitHub README.</p>
+      <h1>Credly Badges by Username</h1>
+      <p>Enter a Credly username and pull all public badges into a table. The form defaults to the test user <strong>steven-tapscott</strong>.</p>
 
       <section className="card">
-        <label>
-          Badge title / alt text
-          <input value={title} onChange={(e) => setTitle(e.target.value)} />
-        </label>
+        <form onSubmit={fetchBadges} className="search-form">
+          <label htmlFor="username">Credly Username</label>
+          <div className="search-row">
+            <input
+              id="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="example: john-doe"
+            />
+            <button type="submit" disabled={loading}>
+              {loading ? 'Loading…' : 'Get Badges'}
+            </button>
+          </div>
+        </form>
 
-        <label>
-          Credly badge image URL
-          <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://images.credly.com/...png" />
-        </label>
-
-        <label>
-          Credly public credential URL
-          <input value={credentialUrl} onChange={(e) => setCredentialUrl(e.target.value)} placeholder="https://www.credly.com/badges/.../public_url" />
-        </label>
-
-        <label>
-          Image width (px)
-          <input type="number" min="50" max="400" value={width} onChange={(e) => setWidth(e.target.value)} />
-        </label>
+        {error ? <p className="error">{error}</p> : null}
       </section>
 
       <section className="card">
-        <h2>Preview</h2>
-        <a href={credentialUrl} target="_blank" rel="noopener noreferrer">
-          <img src={imageUrl} alt={title} width={Number(width) || 140} />
-        </a>
-      </section>
+        <h2>Badges ({badges.length})</h2>
 
-      <section className="card">
-        <h2>Markdown for README.md</h2>
-        <pre>{markdown}</pre>
-        <button onClick={() => copyToClipboard(markdown)}>Copy Markdown</button>
-      </section>
+        {badges.length === 0 ? (
+          <p>No badges to display yet.</p>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Badge</th>
+                  <th>Title</th>
+                  <th>Issued</th>
+                  <th>Credential</th>
+                </tr>
+              </thead>
+              <tbody>
+                {badges.map((badge) => {
+                  const id = badge.id || badge.badge_template_id || badge.url;
+                  const title = badge.badge_template?.name || badge.name || 'Untitled Badge';
+                  const image =
+                    badge.badge_template?.image_url ||
+                    badge.badge_template?.image?.url ||
+                    badge.image_url ||
+                    '';
+                  const issuedAt = badge.issued_at || badge.issued_on || badge.created_at || '';
+                  const credentialUrl = badge.public_url || badge.url || '#';
 
-      <section className="card">
-        <h2>HTML snippet (if needed)</h2>
-        <pre>{html}</pre>
-        <button onClick={() => copyToClipboard(html)}>Copy HTML</button>
-      </section>
-
-      <section className="card">
-        <h2>How to import in README</h2>
-        <ol>
-          <li>Open your GitHub repository README.md.</li>
-          <li>Paste the generated Markdown at the location where you want the badge.</li>
-          <li>Commit the README change and push.</li>
-        </ol>
+                  return (
+                    <tr key={id}>
+                      <td>{image ? <img src={image} alt={title} width="64" /> : 'N/A'}</td>
+                      <td>{title}</td>
+                      <td>{issuedAt ? new Date(issuedAt).toLocaleDateString() : 'N/A'}</td>
+                      <td>
+                        {credentialUrl !== '#' ? (
+                          <a href={credentialUrl} target="_blank" rel="noopener noreferrer">
+                            View
+                          </a>
+                        ) : (
+                          'N/A'
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </main>
   );

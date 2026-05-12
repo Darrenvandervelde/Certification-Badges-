@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 function App() {
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState('steven-tapscott');
   const [badges, setBadges] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -75,7 +75,7 @@ function App() {
   return (
     <main className="container">
       <h1>Credly Badges by Username</h1>
-      <p>Enter a Credly username and pull all public badges into a table.</p>
+      <p>Enter a Credly username and pull all public badges into a table. The form defaults to the test user <strong>steven-tapscott</strong>.</p>
 
       <section className="card">
         <form onSubmit={fetchBadges} className="search-form">
